@@ -59,6 +59,9 @@ export function BulkEmailViewer({ results, onDownload, onActivateCampaign, onEma
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [isUpdatingSequence, setIsUpdatingSequence] = useState(false)
+  const [updateError, setUpdateError] = useState('')
+  const [updateSuccess, setUpdateSuccess] = useState('')
 
   // Initialize with first recipient if available
   useEffect(() => {
@@ -183,7 +186,7 @@ export function BulkEmailViewer({ results, onDownload, onActivateCampaign, onEma
     }
   }
 
-  const saveChanges = () => {
+  const saveChanges = async () => {
     if (currentEmail && currentResult) {
       const updatedResults = editedResults.map(result => {
         if (result.email === selectedRecipient) {
@@ -196,10 +199,28 @@ export function BulkEmailViewer({ results, onDownload, onActivateCampaign, onEma
       })
       
       setEditedResults(updatedResults)
-      setIsEditing(false)
       
-      if (onEmailUpdated) {
-        onEmailUpdated(updatedResults)
+      // Save to backend
+      const currentResult = updatedResults.find(r => r.email === selectedRecipient)
+      if (currentResult) {
+        console.log('💾 Saving changes to backend for:', selectedRecipient)
+        const success = await updateEmailSequence(
+          selectedRecipient, 
+          currentResult.sequence, 
+          currentResult.product_id
+        )
+        
+        if (success) {
+          setIsEditing(false)
+          
+          // Call the callback to update parent component
+          if (onEmailUpdated) {
+            onEmailUpdated(updatedResults)
+          }
+        } else {
+          // Keep editing mode on if save failed
+          console.log('⚠️ Save failed, keeping edit mode')
+        }
       }
     }
   }
@@ -284,6 +305,67 @@ export function BulkEmailViewer({ results, onDownload, onActivateCampaign, onEma
     } finally {
       console.log('🏁 Campaign activation completed')
       setIsLoading(false)
+    }
+  }
+
+  // Function to update email sequence in backend
+  const updateEmailSequence = async (email: string, sequence: EmailSequence, productId?: string) => {
+    setIsUpdatingSequence(true)
+    setUpdateError('')
+    setUpdateSuccess('')
+
+    try {
+      console.log('🔄 Updating email sequence for:', email)
+      console.log('🔄 Sequence data:', sequence)
+
+      const updateData = {
+        email: email,
+        sequence: sequence,
+        product_id: productId || null
+      }
+
+      const response = await fetch('http://localhost:8000/api/v1/update-email-sequence', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      console.log('🔄 Update response status:', response.status)
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Email sequence updated successfully:', result)
+        setUpdateSuccess('✅ Saved')
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setUpdateSuccess('')
+        }, 3000)
+        
+        return true
+      } else {
+        const errorText = await response.text()
+        console.error('❌ Error updating email sequence:', response.status, errorText)
+        
+        let errorMessage = 'Failed to update email sequence'
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.detail || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        
+        setUpdateError(errorMessage)
+        return false
+      }
+    } catch (error) {
+      console.error('🚨 Network error updating email sequence:', error)
+      setUpdateError('Network error: Unable to connect to the server')
+      return false
+    } finally {
+      setIsUpdatingSequence(false)
     }
   }
 
@@ -449,6 +531,25 @@ export function BulkEmailViewer({ results, onDownload, onActivateCampaign, onEma
         {/* Email Content */}
         {currentEmail ? (
           <div className="space-y-3">
+            {/* Success/Error Messages for Updates */}
+            {updateSuccess && (
+              <div className="bg-green-50 border border-green-200 text-green-800 p-3 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✅</span>
+                  <span>{updateSuccess}</span>
+                </div>
+              </div>
+            )}
+
+            {updateError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">❌</span>
+                  <span><strong>Error:</strong> {updateError}</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">Email {currentEmail.index}</h3>
               <div className="flex items-center gap-2">
@@ -513,15 +614,26 @@ export function BulkEmailViewer({ results, onDownload, onActivateCampaign, onEma
                   <Button
                     onClick={saveChanges}
                     size="sm"
+                    disabled={isUpdatingSequence}
                     className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
                   >
-                    <Save className="h-4 w-4" />
-                    Save Changes
+                    {isUpdatingSequence ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={cancelEditing}
+                    disabled={isUpdatingSequence}
                     className="flex items-center gap-2"
                   >
                     <X className="h-4 w-4" />
