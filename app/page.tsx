@@ -209,18 +209,24 @@ export default function EmailAutomationApp() {
   }
 
   const handleEmailGenerated = (result: GeneratedResult | GeneratedResult[]) => {
-    console.log('📧 handleEmailGenerated called with:', result)
+    console.log('🎯 Main app received email generation result:', result)
     console.log('📧 Result type:', Array.isArray(result) ? 'Array' : 'Single')
     console.log('📧 Result length:', Array.isArray(result) ? result.length : 'N/A')
     
     if (Array.isArray(result)) {
-      console.log('📧 Processing bulk results:', result.length, 'emails')
+      console.log('📊 Bulk results set:', result.length, 'emails')
       console.log('📧 First result sample:', result[0])
       console.log('📧 First result sequence keys:', Object.keys(result[0]?.sequence || {}))
       setBulkResults(result)
       setGeneratedResult(null)
     } else {
-      console.log('📧 Processing single result')
+      console.log('📧 Single result set:', result)
+      console.log('🔍 Checking sequence content:')
+      Object.keys(result.sequence).forEach(key => {
+        if (key.includes('Email_') && !key.includes('Subject')) {
+          console.log(`📧 ${key}:`, result.sequence[key].substring(0, 100) + '...')
+        }
+      })
       setGeneratedResult(result)
       setBulkResults([])
     }

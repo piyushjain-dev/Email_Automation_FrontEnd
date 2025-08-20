@@ -43,6 +43,54 @@ export function EmailViewer({ result, onDownload, onActivateCampaign, onEmailUpd
     return `email_edits_${result.email}_${timestamp}`
   }
 
+  // 🔧 CRITICAL FIX: Update editedSequence whenever result changes
+  useEffect(() => {
+    console.log('🔄 EmailViewer received new result:', result)
+    console.log('🔍 Sequence data:', result.sequence)
+    console.log('🔍 Current editedSequence before update:', editedSequence)
+    
+    // Check specific email content for name replacements
+    if (result.sequence) {
+      console.log('🔍 Checking for name replacements in sequence:')
+      Object.keys(result.sequence).forEach(key => {
+        if (key.includes('Email_') && !key.includes('Subject')) {
+          const content = result.sequence[key]
+          console.log(`📧 ${key}:`, content.substring(0, 100) + '...')
+        }
+      })
+    }
+    
+    // 🎯 FIX: Update editedSequence with new data
+    console.log('🔄 Updating editedSequence with new data...')
+    setEditedSequence({ ...result.sequence })
+    
+    // Also update current email display
+    const currentEmail = getCurrentEmail()
+    if (currentEmail && !isEditing) {
+      setEditedSubject(currentEmail.subject)
+      setEditedBody(currentEmail.body)
+    }
+  }, [result, isEditing, currentEmailIndex])
+
+  // Helper function to get current email
+  const getCurrentEmail = () => {
+    const subject = editedSequence[`Email_${currentEmailIndex}_Subject`]
+    const body = editedSequence[`Email_${currentEmailIndex}`]
+    if (subject && body) {
+      return { subject, body, index: currentEmailIndex }
+    }
+    return null
+  }
+
+  // 🔧 FIX: Update current email when index or sequence changes
+  useEffect(() => {
+    const currentEmail = getCurrentEmail()
+    if (currentEmail && !isEditing) {
+      setEditedSubject(currentEmail.subject)
+      setEditedBody(currentEmail.body)
+    }
+  }, [currentEmailIndex, editedSequence, isEditing])
+
   // Load saved edits from localStorage on component mount
   useEffect(() => {
     const storageKey = getStorageKey()
@@ -79,7 +127,21 @@ export function EmailViewer({ result, onDownload, onActivateCampaign, onEmailUpd
     }
   }
 
-  const currentEmail = emails.find(email => email.index === currentEmailIndex)
+  // 🔧 CRITICAL FIX: Get current email directly from editedSequence
+  const currentEmail = {
+    subject: editedSequence[`Email_${currentEmailIndex}_Subject`] || '',
+    body: editedSequence[`Email_${currentEmailIndex}`] || '',
+    index: currentEmailIndex
+  }
+  
+  // 🔍 DEBUG: Log what currentEmail contains
+  console.log('🔍 Current email data:', {
+    index: currentEmailIndex,
+    subject: currentEmail.subject,
+    body: currentEmail.body?.substring(0, 100) + '...',
+    editedSequenceKeys: Object.keys(editedSequence)
+  })
+  
   const totalEmails = emails.length
 
   const goToPrevious = () => {
@@ -177,10 +239,11 @@ export function EmailViewer({ result, onDownload, onActivateCampaign, onEmailUpd
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-
-        {/* Current Email Display */}
-        {currentEmail && (
-          <div className="space-y-3">
+        {/* 🔧 CRITICAL FIX: Add key to force re-render when sequence changes */}
+        <div key={JSON.stringify(editedSequence)}>
+          {/* Current Email Display */}
+          {currentEmail && (
+            <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">Email {currentEmail.index}</h3>
               <div className="flex items-center gap-2">
@@ -264,6 +327,7 @@ export function EmailViewer({ result, onDownload, onActivateCampaign, onEmailUpd
             </div>
           </div>
         )}
+        </div>
 
         {/* Action Buttons */}
         <div className="flex gap-3 pt-4 border-t">
